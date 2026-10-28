@@ -1,0 +1,64 @@
+# rcal-sim stack — ArduPilot SITL + MAVLink↔UCI gateway
+#
+# Run: docker compose up -d
+# Requires Docker Compose >= 2.23 (Docker Desktop 4.25+).
+
+services:
+  sitl:
+    image: rcal-sim/sitl:latest
+    build:
+      context: .
+      dockerfile: docker/sitl/Dockerfile
+    restart: unless-stopped
+    networks:
+      - rcal-sim
+
+  rcal-sim:
+    image: rcal-sim/rcal-sim:latest
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM rust:slim-bookworm AS builder
+        WORKDIR /build
+        COPY rcal-sim/ ./rcal-sim/
+        WORKDIR /build/rcal-sim
+        RUN cargo build --release --bin rcal_sim
+
+        FROM debian:bookworm-slim
+        WORKDIR /app
+        COPY --from=builder /build/rcal-sim/target/release/rcal_sim /app/rcal_sim
+        ENV RCAL_CALCONFIG_PATH=/app/CALConfig.toml
+        CMD ["/app/rcal_sim"]
+    restart: unless-stopped
+    depends_on:
+      - sitl
+    volumes:
+      - ./docker/CALConfig.docker.toml:/app/CALConfig.toml:ro
+    networks:
+      - rcal-sim
+
+  asb_view:
+    build:
+      context: ..
+      dockerfile_inline: |
+        FROM rust:slim-bookworm AS builder
+        RUN cargo install rcal --verbose --bin asb_view -F tui
+
+        FROM debian:bookworm-slim
+        COPY --from=builder /usr/local/cargo/bin/asb_view /usr/local/bin/asb_view
+        ENV RCAL_CALCONFIG_PATH=/app/CALConfig.toml
+        CMD ["asb_view"]
+    profiles:
+      - tools
+    depends_on:
+      - rcal-sim
+    volumes:
+      - ./docker/CALConfig.docker.toml:/app/CALConfig.toml:ro
+    networks:
+      - rcal-sim
+    stdin_open: true
+    tty: true
+
+networks:
+  rcal-sim:
+    driver: bridge

@@ -1,0 +1,39 @@
+[system]
+id    = "UAV-SIM-1"
+uuid  = "b2e4f8a1-3c7d-4e9b-a5f2-8d1c6e3b9047"
+default_transport = "uav_sim"
+
+[system.logging]
+default_level = "info"
+[[system.logging.sink]]
+type   = "stdout"
+format = "pretty"
+level  = "info"
+
+[[transport]]
+id   = "uav_sim"
+type = "dds"
+uri  = "0"
+
+[[service]]
+id    = "rcal_sim"
+label = "MAVLink Simulator Gateway"
+uuid  = "a7c3e9b5-2f1d-4a8e-b6c4-9d2e7f5a3b1c"
+[[service.topic]]
+id = "PositionReport"
+[[service.topic]]
+id = "SystemStatus"
+[[service.topic]]
+id = "NavigationReport"
+[[service.topic]]
+id = "FlightCapabilityStatus"
+[[service.topic]]
+id = "FlightActivity"
+[[service.topic]]
+id = "SubsystemStatus"
+[[service.topic]]
+id = "ServiceStatus"
+
+[rcal_sim]
+# rcal-sim connects to the SITL container's TCP server (port 5760).
+sitl_address = "tcpout:sitl:5760"
