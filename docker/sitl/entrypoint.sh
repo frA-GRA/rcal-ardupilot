@@ -8,5 +8,5 @@ exec arducopter \
     --model + \
     --speedup 1 \
     --home -35.363261,149.165230,584,353 \
-    --slave 0 \
-    --instance 0
+    --instance 0 \
+    --uartA tcp:5760:wait

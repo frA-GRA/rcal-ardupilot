@@ -1,15 +1,15 @@
 [package]
-name = "rcal-sim"
+name = "rcal-ardupilot"
 version = "0.1.0"
 edition = "2021"
 description = "MAVLink-to-UCI gateway for ArduPilot SITL"
 
 [[bin]]
-name = "rcal_sim"
-path = "src/bin/rcal_sim.rs"
+name = "rcal_ardupilot"
+path = "src/bin/rcal_ardupilot.rs"
 
 [dependencies]
-rcal        = "3"
+rcal        = { version = "3", features = ["activemq"] }
 rcal_macros = "3"
 mavlink     = { version = "0.21", default-features = false, features = ["std", "dialect-ardupilotmega", "transport-udp", "transport-tcp"] }
 tokio       = { version = "1", features = ["full"] }

@@ -4,7 +4,7 @@ pub mod translate;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use slog::{error, info, warn};
+use slog::{debug, error, info, warn};
 
 use rcal::cal::{AbstractCal, AbstractWriter, TopicQos};
 use rcal::calconfig::CalConfig;
@@ -227,17 +227,42 @@ impl AbstractService for MavlinkSimService {
         let recv_state = Arc::clone(&state);
         let recv_logger = self.logger.clone();
         let recv_handle = tokio::task::spawn_blocking(move || {
-            let conn = match mavlink::connect::<MavMessage>(&sitl_addr) {
-                Ok(c) => c,
-                Err(e) => {
-                    error!(recv_logger, "MAVLink connect failed"; "addr" => &sitl_addr, "error" => %e);
-                    return;
+            let conn = std::sync::Arc::new(loop {
+                match mavlink::connect::<MavMessage>(&sitl_addr) {
+                    Ok(c) => break c,
+                    Err(e) => {
+                        warn!(recv_logger, "MAVLink connect failed, retrying in 2s"; "addr" => &sitl_addr, "error" => %e);
+                        std::thread::sleep(Duration::from_secs(2));
+                    }
                 }
-            };
+            });
             info!(recv_logger, "MAVLink connected"; "addr" => &sitl_addr);
+
+            // SITL won't stream telemetry until it sees a GCS heartbeat.
+            let hb_conn = std::sync::Arc::clone(&conn);
+            let hb_logger = recv_logger.clone();
+            std::thread::spawn(move || {
+                use mavlink::dialects::ardupilotmega as apm;
+                let header = mavlink::MavHeader { system_id: 255, component_id: 190, sequence: 0 };
+                let hb = MavMessage::HEARTBEAT(apm::HEARTBEAT_DATA {
+                    custom_mode: 0,
+                    mavtype: apm::MavType::MAV_TYPE_GCS,
+                    autopilot: apm::MavAutopilot::MAV_AUTOPILOT_INVALID,
+                    base_mode: apm::MavModeFlag::empty(),
+                    system_status: apm::MavState::MAV_STATE_ACTIVE,
+                    mavlink_version: 3,
+                });
+                loop {
+                    if let Err(e) = hb_conn.send(&header, &hb) {
+                        warn!(hb_logger, "heartbeat send failed"; "error" => %e);
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            });
+
             loop {
                 match conn.recv() {
-                    Ok((_, msg)) => update_sim_state(&recv_state, msg),
+                    Ok((_, msg)) => update_sim_state(&recv_state, msg, &recv_logger),
                     Err(MessageReadError::Io(ref io_err))
                         if io_err.kind() == std::io::ErrorKind::WouldBlock =>
                     {
@@ -452,28 +477,56 @@ impl AbstractService for MavlinkSimService {
     }
 }
 
-fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage) {
+fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage, logger: &slog::Logger) {
     match msg {
         MavMessage::HEARTBEAT(hb) => {
+            let new_state   = mav_state_to_system_state(hb.system_status);
+            let new_cont    = mav_state_to_contingency(hb.system_status);
+            let new_armed   = is_armed(hb.base_mode);
+            debug!(logger, "HEARTBEAT"; "armed" => new_armed, "mav_status" => ?hb.system_status);
             let mut s = state.lock().unwrap();
-            s.system_state = mav_state_to_system_state(hb.system_status);
-            s.contingency  = mav_state_to_contingency(hb.system_status);
-            s.armed        = is_armed(hb.base_mode);
+            if new_armed != s.armed {
+                info!(logger, "arm state changed"; "armed" => new_armed);
+            }
+            if std::mem::discriminant(&new_state) != std::mem::discriminant(&s.system_state) {
+                info!(logger, "system state changed";
+                    "from" => ?s.system_state, "to" => ?new_state,
+                    "mav_status" => ?hb.system_status);
+            }
+            s.system_state = new_state;
+            s.contingency  = new_cont;
+            s.armed        = new_armed;
         }
         MavMessage::SYS_STATUS(ss) => {
+            debug!(logger, "SYS_STATUS"; "battery_pct" => ss.battery_remaining);
             let mut s = state.lock().unwrap();
+            if s.battery_pct < 0 && ss.battery_remaining >= 0 {
+                info!(logger, "battery status acquired"; "pct" => ss.battery_remaining);
+            }
             s.battery_pct = ss.battery_remaining;
         }
         MavMessage::GLOBAL_POSITION_INT(gp) => {
+            let lat_deg = gp.lat as f64 * 1e-7;
+            let lon_deg = gp.lon as f64 * 1e-7;
+            let alt_m   = gp.alt as f32 * 1e-3;
+            debug!(logger, "GLOBAL_POSITION_INT";
+                "lat_deg" => lat_deg, "lon_deg" => lon_deg, "alt_m" => alt_m,
+                "vx_cms" => gp.vx, "vy_cms" => gp.vy, "vz_cms" => gp.vz);
             let mut s = state.lock().unwrap();
-            s.lat_rad = Some((gp.lat as f64 * 1e-7).to_radians());
-            s.lon_rad = Some((gp.lon as f64 * 1e-7).to_radians());
-            s.alt_m   = Some(gp.alt as f32 * 1e-3);
+            if s.lat_rad.is_none() {
+                info!(logger, "GPS fix acquired";
+                    "lat_deg" => lat_deg, "lon_deg" => lon_deg, "alt_m" => alt_m);
+            }
+            s.lat_rad = Some(lat_deg.to_radians());
+            s.lon_rad = Some(lon_deg.to_radians());
+            s.alt_m   = Some(alt_m);
             s.vx_ms   = Some(gp.vx as f32 * 0.01);
             s.vy_ms   = Some(gp.vy as f32 * 0.01);
             s.vz_ms   = Some(gp.vz as f32 * 0.01);
         }
         MavMessage::ATTITUDE(att) => {
+            debug!(logger, "ATTITUDE";
+                "roll_rad" => att.roll, "pitch_rad" => att.pitch, "yaw_rad" => att.yaw);
             let mut s = state.lock().unwrap();
             s.roll_rad  = Some(att.roll);
             s.pitch_rad = Some(att.pitch);

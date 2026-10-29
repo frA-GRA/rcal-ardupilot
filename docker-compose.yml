@@ -4,12 +4,20 @@
 # Requires Docker Compose >= 2.23 (Docker Desktop 4.25+).
 
 services:
+  broker:
+    image: apache/activemq-classic:latest
+    restart: unless-stopped
+    networks:
+      - rcal-sim
+
   sitl:
     image: rcal-sim/sitl:latest
     build:
       context: .
       dockerfile: docker/sitl/Dockerfile
     restart: unless-stopped
+    ports:
+      - "5760:5760"
     networks:
       - rcal-sim
 
@@ -32,6 +40,7 @@ services:
     restart: unless-stopped
     depends_on:
       - sitl
+      - broker
     volumes:
       - ./docker/CALConfig.docker.toml:/app/CALConfig.toml:ro
     networks:
@@ -42,16 +51,25 @@ services:
       context: ..
       dockerfile_inline: |
         FROM rust:slim-bookworm AS builder
-        RUN cargo install rcal --verbose --bin asb_view -F tui
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+        WORKDIR /build
+        COPY rcal-sim/docker/CALConfig.docker.toml /app/CALConfig.toml
+        COPY rcal/rcal/ ./rcal/
+        ENV RCAL_CALCONFIG_PATH=/app/CALConfig.toml
+        WORKDIR /build/rcal
+        RUN cargo build --release --bin asb_view --features tui,activemq
 
         FROM debian:bookworm-slim
-        COPY --from=builder /usr/local/cargo/bin/asb_view /usr/local/bin/asb_view
+        WORKDIR /app
+        COPY --from=builder /build/rcal/target/release/asb_view /usr/local/bin/asb_view
         ENV RCAL_CALCONFIG_PATH=/app/CALConfig.toml
         CMD ["asb_view"]
     profiles:
       - tools
     depends_on:
       - rcal-sim
+      - broker
     volumes:
       - ./docker/CALConfig.docker.toml:/app/CALConfig.toml:ro
     networks:

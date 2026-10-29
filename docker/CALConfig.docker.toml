@@ -12,28 +12,38 @@ level  = "info"
 
 [[transport]]
 id   = "uav_sim"
-type = "dds"
-uri  = "0"
+type = "activemq"
+uri  = "stomp://broker:61613"
 
 [[service]]
 id    = "rcal_sim"
 label = "MAVLink Simulator Gateway"
 uuid  = "a7c3e9b5-2f1d-4a8e-b6c4-9d2e7f5a3b1c"
-[[service.topic]]
-id = "PositionReport"
-[[service.topic]]
-id = "SystemStatus"
-[[service.topic]]
-id = "NavigationReport"
-[[service.topic]]
-id = "FlightCapabilityStatus"
-[[service.topic]]
-id = "FlightActivity"
-[[service.topic]]
-id = "SubsystemStatus"
-[[service.topic]]
-id = "ServiceStatus"
+topic = [
+  {id = "PositionReport"},
+  {id = "SystemStatus"},
+  {id = "NavigationReport"},
+  {id = "FlightCapabilityStatus"},
+  {id = "FlightActivity"},
+  {id = "SubsystemStatus"},
+  {id = "ServiceStatus"},
+]
 
 [rcal_sim]
 # rcal-sim connects to the SITL container's TCP server (port 5760).
 sitl_address = "tcpout:sitl:5760"
+
+[[service]]
+id    = "asb_view"
+label = "ASB viewer"
+uuid = "7f163721-62d0-47e5-9587-8b74421e99ad"
+
+topic = [
+  {id = "PositionReport"},
+  {id = "SystemStatus"},
+  {id = "NavigationReport"},
+  {id = "FlightCapabilityStatus"},
+  {id = "FlightActivity"},
+  {id = "SubsystemStatus"},
+  {id = "ServiceStatus"},
+]
