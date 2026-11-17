@@ -25,63 +25,63 @@ use mavlink::MavConnection;
 #[derive(Clone)]
 struct SimState {
     system_state: SystemStateEnum,
-    contingency:  SystemContingencyLevelEnum,
-    armed:        bool,
-    battery_pct:  i8, // 0-100, -1 = unknown
+    contingency: SystemContingencyLevelEnum,
+    armed: bool,
+    battery_pct: i8, // 0-100, -1 = unknown
 
     lat_rad: Option<f64>,
     lon_rad: Option<f64>,
-    alt_m:   Option<f32>,
-    vx_ms:   Option<f32>,
-    vy_ms:   Option<f32>,
-    vz_ms:   Option<f32>,
+    alt_m: Option<f32>,
+    vx_ms: Option<f32>,
+    vy_ms: Option<f32>,
+    vz_ms: Option<f32>,
 
-    roll_rad:  Option<f32>,
+    roll_rad: Option<f32>,
     pitch_rad: Option<f32>,
-    yaw_rad:   Option<f32>,
+    yaw_rad: Option<f32>,
 }
 
 impl Default for SimState {
     fn default() -> Self {
         Self {
             system_state: SystemStateEnum::Inactive,
-            contingency:  SystemContingencyLevelEnum::Normal,
-            armed:        false,
-            battery_pct:  -1,
-            lat_rad:      None,
-            lon_rad:      None,
-            alt_m:        None,
-            vx_ms:        None,
-            vy_ms:        None,
-            vz_ms:        None,
-            roll_rad:     None,
-            pitch_rad:    None,
-            yaw_rad:      None,
+            contingency: SystemContingencyLevelEnum::Normal,
+            armed: false,
+            battery_pct: -1,
+            lat_rad: None,
+            lon_rad: None,
+            alt_m: None,
+            vx_ms: None,
+            vy_ms: None,
+            vz_ms: None,
+            roll_rad: None,
+            pitch_rad: None,
+            yaw_rad: None,
         }
     }
 }
 
 pub struct MavlinkSimService {
-    lifecycle:     Box<dyn AbstractService>,
-    pos_writer:    Option<Box<dyn AbstractWriter<PositionReport_>>>,
-    sys_writer:    Option<Box<dyn AbstractWriter<SystemStatus_>>>,
-    nav_writer:    Option<Box<dyn AbstractWriter<NavigationReport_>>>,
-    fcap_writer:   Option<Box<dyn AbstractWriter<FlightCapabilityStatus_>>>,
-    fact_writer:   Option<Box<dyn AbstractWriter<FlightActivity_>>>,
+    lifecycle: Box<dyn AbstractService>,
+    pos_writer: Option<Box<dyn AbstractWriter<PositionReport_>>>,
+    sys_writer: Option<Box<dyn AbstractWriter<SystemStatus_>>>,
+    nav_writer: Option<Box<dyn AbstractWriter<NavigationReport_>>>,
+    fcap_writer: Option<Box<dyn AbstractWriter<FlightCapabilityStatus_>>>,
+    fact_writer: Option<Box<dyn AbstractWriter<FlightActivity_>>>,
     subsys_writer: Option<Box<dyn AbstractWriter<SubsystemStatus_>>>,
-    svc_writer:    Option<Box<dyn AbstractWriter<ServiceStatus_>>>,
+    svc_writer: Option<Box<dyn AbstractWriter<ServiceStatus_>>>,
 
-    pos_tmpl:    PositionReport_,
-    sys_tmpl:    SystemStatus_,
-    nav_tmpl:    NavigationReport_,
-    fcap_tmpl:   FlightCapabilityStatus_,
-    fact_tmpl:   FlightActivity_,
+    pos_tmpl: PositionReport_,
+    sys_tmpl: SystemStatus_,
+    nav_tmpl: NavigationReport_,
+    fcap_tmpl: FlightCapabilityStatus_,
+    fact_tmpl: FlightActivity_,
     subsys_tmpl: SubsystemStatus_,
-    svc_msg:     ServiceStatus_,
+    svc_msg: ServiceStatus_,
 
-    sim_config:    MavlinkSimConfig,
-    logger:        slog::Logger,
-    task_handles:  Vec<tokio::task::JoinHandle<()>>,
+    sim_config: MavlinkSimConfig,
+    logger: slog::Logger,
+    task_handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 #[rcal_macros::rcal_trace]
@@ -95,8 +95,7 @@ impl MavlinkSimService {
     where
         A: AbstractCal + 'static,
     {
-        let sim_config: MavlinkSimConfig =
-            cal_config.get_extension("rcal_sim").unwrap_or_default();
+        let sim_config: MavlinkSimConfig = cal_config.get_extension("rcal_sim").unwrap_or_default();
 
         let system_uuid = cal_config.system.uuid;
         let service_uuid = cal_config
@@ -105,8 +104,8 @@ impl MavlinkSimService {
             .unwrap_or_else(UUID::generate_v4);
 
         let capability_id = UUID::generate_v3(&service_uuid, b"flight_capability");
-        let activity_id   = UUID::generate_v3(&service_uuid, b"flight_activity");
-        let subsystem_id  = UUID::generate_v3(&system_uuid, b"autopilot_subsystem");
+        let activity_id = UUID::generate_v3(&service_uuid, b"flight_activity");
+        let subsystem_id = UUID::generate_v3(&system_uuid, b"autopilot_subsystem");
 
         let mut svc = AbstractServiceImpl::new(
             service_name,
@@ -117,25 +116,39 @@ impl MavlinkSimService {
             logger.clone(),
         );
 
-        let pos_writer    = svc.create_writer::<PositionReport_>("PositionReport", TopicQos::default())?;
-        let sys_writer    = svc.create_writer::<SystemStatus_>("SystemStatus", TopicQos::default())?;
-        let nav_writer    = svc.create_writer::<NavigationReport_>("NavigationReport", TopicQos::default())?;
-        let fcap_writer   = svc.create_writer::<FlightCapabilityStatus_>("FlightCapabilityStatus", TopicQos::default())?;
-        let fact_writer   = svc.create_writer::<FlightActivity_>("FlightActivity", TopicQos::default())?;
-        let subsys_writer = svc.create_writer::<SubsystemStatus_>("SubsystemStatus", TopicQos::default())?;
-        let svc_writer    = svc.create_writer::<ServiceStatus_>("ServiceStatus", TopicQos::default())?;
+        let pos_writer =
+            svc.create_writer::<PositionReport_>("PositionReport", TopicQos::default())?;
+        let sys_writer = svc.create_writer::<SystemStatus_>("SystemStatus", TopicQos::default())?;
+        let nav_writer =
+            svc.create_writer::<NavigationReport_>("NavigationReport", TopicQos::default())?;
+        let fcap_writer = svc.create_writer::<FlightCapabilityStatus_>(
+            "FlightCapabilityStatus",
+            TopicQos::default(),
+        )?;
+        let fact_writer =
+            svc.create_writer::<FlightActivity_>("FlightActivity", TopicQos::default())?;
+        let subsys_writer =
+            svc.create_writer::<SubsystemStatus_>("SubsystemStatus", TopicQos::default())?;
+        let svc_writer =
+            svc.create_writer::<ServiceStatus_>("ServiceStatus", TopicQos::default())?;
 
         // ── PositionReport template ──────────────────────────────────────────
         let mut pos_tmpl = svc.create_message::<PositionReport_>()?;
         *pos_tmpl.message_data_mut().system_id_mut().uuid_mut() = system_uuid;
-        pos_tmpl.message_data_mut().system_id_mut().descriptive_label_set(cal_config.system.id.clone());
+        pos_tmpl
+            .message_data_mut()
+            .system_id_mut()
+            .descriptive_label_set(cal_config.system.id.clone());
         *pos_tmpl.message_data_mut().source_mut() = SystemSourceEnum::Actual;
         *pos_tmpl.message_data_mut().current_operating_domain_mut() = EnvironmentEnum::Air;
 
         // ── SystemStatus template ────────────────────────────────────────────
         let mut sys_tmpl = svc.create_message::<SystemStatus_>()?;
         *sys_tmpl.message_data_mut().system_id_mut().uuid_mut() = system_uuid;
-        sys_tmpl.message_data_mut().system_id_mut().descriptive_label_set(cal_config.system.id.clone());
+        sys_tmpl
+            .message_data_mut()
+            .system_id_mut()
+            .descriptive_label_set(cal_config.system.id.clone());
         *sys_tmpl.message_data_mut().source_mut() = SystemSourceEnum::Actual;
         sys_tmpl.message_data_mut().service_id_mut().resize(1);
         *sys_tmpl.message_data_mut().service_id_mut()[0].uuid_mut() = service_uuid;
@@ -144,24 +157,36 @@ impl MavlinkSimService {
         // ── NavigationReport template ────────────────────────────────────────
         let mut nav_tmpl = svc.create_message::<NavigationReport_>()?;
         *nav_tmpl.message_data_mut().system_id_mut().uuid_mut() = system_uuid;
-        nav_tmpl.message_data_mut().system_id_mut().descriptive_label_set(cal_config.system.id.clone());
+        nav_tmpl
+            .message_data_mut()
+            .system_id_mut()
+            .descriptive_label_set(cal_config.system.id.clone());
         *nav_tmpl.message_data_mut().source_mut() = SystemSourceEnum::Actual;
         *nav_tmpl.message_data_mut().contingency_level_mut() = SystemContingencyLevelEnum::Normal;
 
         // ── FlightCapabilityStatus template ─────────────────────────────────
         let mut fcap_tmpl = svc.create_message::<FlightCapabilityStatus_>()?;
-        fcap_tmpl.message_data_mut().capability_status_mut().resize(1);
-        *fcap_tmpl.message_data_mut().capability_status_mut()[0].capability_id_mut().uuid_mut() = capability_id;
+        fcap_tmpl
+            .message_data_mut()
+            .capability_status_mut()
+            .resize(1);
+        *fcap_tmpl.message_data_mut().capability_status_mut()[0]
+            .capability_id_mut()
+            .uuid_mut() = capability_id;
         fcap_tmpl.message_data_mut().capability_status_mut()[0]
             .capability_id_mut()
             .descriptive_label_set("FlightCapability".into());
-        *fcap_tmpl.message_data_mut().capability_status_mut()[0].availability_mut() =
-            AvailabilityEnum::Available;
+        set_availability(
+            &mut fcap_tmpl.message_data_mut().capability_status_mut()[0],
+            true,
+        );
 
         // ── FlightActivity template ──────────────────────────────────────────
         let mut fact_tmpl = svc.create_message::<FlightActivity_>()?;
         fact_tmpl.message_data_mut().activity_mut().resize(1);
-        *fact_tmpl.message_data_mut().activity_mut()[0].activity_id_mut().uuid_mut() = activity_id;
+        *fact_tmpl.message_data_mut().activity_mut()[0]
+            .activity_id_mut()
+            .uuid_mut() = activity_id;
         fact_tmpl.message_data_mut().activity_mut()[0]
             .capability_id_mut()
             .resize(1);
@@ -185,17 +210,20 @@ impl MavlinkSimService {
         let mut svc_msg = svc.create_message::<ServiceStatus_>()?;
         *svc_msg.message_data_mut().service_state_mut() = ServiceStateEnum::Normal;
         *svc_msg.message_data_mut().service_id_mut().uuid_mut() = service_uuid;
-        svc_msg.message_data_mut().service_id_mut().descriptive_label_set(service_name.into());
+        svc_msg
+            .message_data_mut()
+            .service_id_mut()
+            .descriptive_label_set(service_name.into());
 
         Ok(Self {
             lifecycle: Box::new(svc),
-            pos_writer:    Some(pos_writer),
-            sys_writer:    Some(sys_writer),
-            nav_writer:    Some(nav_writer),
-            fcap_writer:   Some(fcap_writer),
-            fact_writer:   Some(fact_writer),
+            pos_writer: Some(pos_writer),
+            sys_writer: Some(sys_writer),
+            nav_writer: Some(nav_writer),
+            fcap_writer: Some(fcap_writer),
+            fact_writer: Some(fact_writer),
             subsys_writer: Some(subsys_writer),
-            svc_writer:    Some(svc_writer),
+            svc_writer: Some(svc_writer),
             pos_tmpl,
             sys_tmpl,
             nav_tmpl,
@@ -212,10 +240,18 @@ impl MavlinkSimService {
 
 #[rcal_macros::rcal_trace]
 impl AbstractService for MavlinkSimService {
-    fn system_id(&self) -> &str { self.lifecycle.system_id() }
-    fn service_id(&self) -> &str { self.lifecycle.service_id() }
-    fn subsystem_ids(&self) -> &[String] { self.lifecycle.subsystem_ids() }
-    fn lifecycle_state(&self) -> ServiceLifecycleState { self.lifecycle.lifecycle_state() }
+    fn system_id(&self) -> &str {
+        self.lifecycle.system_id()
+    }
+    fn service_id(&self) -> &str {
+        self.lifecycle.service_id()
+    }
+    fn subsystem_ids(&self) -> &[String] {
+        self.lifecycle.subsystem_ids()
+    }
+    fn lifecycle_state(&self) -> ServiceLifecycleState {
+        self.lifecycle.lifecycle_state()
+    }
 
     fn activate(&mut self) -> CalResult<()> {
         self.lifecycle.activate()?;
@@ -243,7 +279,11 @@ impl AbstractService for MavlinkSimService {
             let hb_logger = recv_logger.clone();
             std::thread::spawn(move || {
                 use mavlink::dialects::ardupilotmega as apm;
-                let header = mavlink::MavHeader { system_id: 255, component_id: 190, sequence: 0 };
+                let header = mavlink::MavHeader {
+                    system_id: 255,
+                    component_id: 190,
+                    sequence: 0,
+                };
                 let hb = MavMessage::HEARTBEAT(apm::HEARTBEAT_DATA {
                     custom_mode: 0,
                     mavtype: apm::MavType::MAV_TYPE_GCS,
@@ -345,12 +385,10 @@ impl AbstractService for MavlinkSimService {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 {
                     let s = fcap_state.lock().unwrap();
-                    *fcap_msg.message_data_mut().capability_status_mut()[0].availability_mut() =
-                        if s.armed {
-                            AvailabilityEnum::Available
-                        } else {
-                            AvailabilityEnum::Unavailable
-                        };
+                    set_availability(
+                        &mut fcap_msg.message_data_mut().capability_status_mut()[0],
+                        s.armed,
+                    );
                 }
                 update_message_header!(fcap_msg);
                 if let Err(e) = fcap_writer.write(&fcap_msg) {
@@ -369,12 +407,12 @@ impl AbstractService for MavlinkSimService {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 {
                     let s = fact_state.lock().unwrap();
-                    *fact_msg.message_data_mut().activity_mut()[0].activity_state_mut() =
-                        if s.armed {
-                            ActivityStateEnum::Active_unconstrained
-                        } else {
-                            ActivityStateEnum::Enabled
-                        };
+                    *fact_msg.message_data_mut().activity_mut()[0].activity_state_mut() = if s.armed
+                    {
+                        ActivityStateEnum::Active_unconstrained
+                    } else {
+                        ActivityStateEnum::Enabled
+                    };
                 }
                 update_message_header!(fact_msg);
                 if let Err(e) = fact_writer.write(&fact_msg) {
@@ -384,7 +422,10 @@ impl AbstractService for MavlinkSimService {
         }));
 
         // ── SubsystemStatus (1 Hz) ───────────────────────────────────────────
-        let mut subsys_writer = self.subsys_writer.take().expect("subsys_writer already taken");
+        let mut subsys_writer = self
+            .subsys_writer
+            .take()
+            .expect("subsys_writer already taken");
         let mut subsys_msg = self.subsys_tmpl.clone();
         let subsys_state = Arc::clone(&state);
         let subsys_logger = self.logger.clone();
@@ -419,17 +460,20 @@ impl AbstractService for MavlinkSimService {
                     let s = pos_state.lock().unwrap();
                     if let (Some(lat), Some(lon), Some(alt)) = (s.lat_rad, s.lon_rad, s.alt_m) {
                         {
-                            let pt = pos_msg.message_data_mut().inertial_state_mut().position_mut();
-                            *pt.latitude_mut()  = lat;
+                            let pt = pos_msg
+                                .message_data_mut()
+                                .inertial_state_mut()
+                                .position_mut();
+                            *pt.latitude_mut() = lat;
                             *pt.longitude_mut() = lon;
-                            *pt.altitude_mut()  = alt as f64;
+                            *pt.altitude_mut() = alt as f64;
                         }
                         if let (Some(vx), Some(vy)) = (s.vx_ms, s.vy_ms) {
                             let is = pos_msg.message_data_mut().inertial_state_mut();
                             is.ground_velocity_enable();
                             if let Some(gv) = is.ground_velocity_mut() {
                                 *gv.north_speed_mut() = vx as f64;
-                                *gv.east_speed_mut()  = vy as f64;
+                                *gv.east_speed_mut() = vy as f64;
                             }
                         }
                         if let (Some(roll), Some(pitch), Some(yaw)) =
@@ -438,9 +482,9 @@ impl AbstractService for MavlinkSimService {
                             let is = pos_msg.message_data_mut().inertial_state_mut();
                             is.orientation_enable();
                             if let Some(ori) = is.orientation_mut() {
-                                *ori.yaw_mut()   = yaw as f64;
+                                *ori.yaw_mut() = yaw as f64;
                                 *ori.pitch_mut() = pitch as f64;
-                                *ori.roll_mut()  = roll as f64;
+                                *ori.roll_mut() = roll as f64;
                             }
                         }
                         true
@@ -477,12 +521,33 @@ impl AbstractService for MavlinkSimService {
     }
 }
 
+/// Set a capability's availability. UCI 2.5 has `Availability` directly; older schemas
+/// (e.g. A-GRA, UCI 2.3) nest it in `AvailabilityInfo`.
+fn set_availability(cap: &mut CapabilityStatusType_, available: bool) {
+    #[cfg(uci_ge_2_5)]
+    {
+        *cap.availability_mut() = if available {
+            AvailabilityEnum::Available
+        } else {
+            AvailabilityEnum::Unavailable
+        };
+    }
+    #[cfg(not(uci_ge_2_5))]
+    {
+        *cap.availability_info_mut().availability_mut() = if available {
+            CapabilityAvailabilityEnum::Available
+        } else {
+            CapabilityAvailabilityEnum::Unavailable
+        };
+    }
+}
+
 fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage, logger: &slog::Logger) {
     match msg {
         MavMessage::HEARTBEAT(hb) => {
-            let new_state   = mav_state_to_system_state(hb.system_status);
-            let new_cont    = mav_state_to_contingency(hb.system_status);
-            let new_armed   = is_armed(hb.base_mode);
+            let new_state = mav_state_to_system_state(hb.system_status);
+            let new_cont = mav_state_to_contingency(hb.system_status);
+            let new_armed = is_armed(hb.base_mode);
             debug!(logger, "HEARTBEAT"; "armed" => new_armed, "mav_status" => ?hb.system_status);
             let mut s = state.lock().unwrap();
             if new_armed != s.armed {
@@ -494,8 +559,8 @@ fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage, logger: &slog::Log
                     "mav_status" => ?hb.system_status);
             }
             s.system_state = new_state;
-            s.contingency  = new_cont;
-            s.armed        = new_armed;
+            s.contingency = new_cont;
+            s.armed = new_armed;
         }
         MavMessage::SYS_STATUS(ss) => {
             debug!(logger, "SYS_STATUS"; "battery_pct" => ss.battery_remaining);
@@ -508,7 +573,7 @@ fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage, logger: &slog::Log
         MavMessage::GLOBAL_POSITION_INT(gp) => {
             let lat_deg = gp.lat as f64 * 1e-7;
             let lon_deg = gp.lon as f64 * 1e-7;
-            let alt_m   = gp.alt as f32 * 1e-3;
+            let alt_m = gp.alt as f32 * 1e-3;
             debug!(logger, "GLOBAL_POSITION_INT";
                 "lat_deg" => lat_deg, "lon_deg" => lon_deg, "alt_m" => alt_m,
                 "vx_cms" => gp.vx, "vy_cms" => gp.vy, "vz_cms" => gp.vz);
@@ -519,19 +584,46 @@ fn update_sim_state(state: &Mutex<SimState>, msg: MavMessage, logger: &slog::Log
             }
             s.lat_rad = Some(lat_deg.to_radians());
             s.lon_rad = Some(lon_deg.to_radians());
-            s.alt_m   = Some(alt_m);
-            s.vx_ms   = Some(gp.vx as f32 * 0.01);
-            s.vy_ms   = Some(gp.vy as f32 * 0.01);
-            s.vz_ms   = Some(gp.vz as f32 * 0.01);
+            s.alt_m = Some(alt_m);
+            s.vx_ms = Some(gp.vx as f32 * 0.01);
+            s.vy_ms = Some(gp.vy as f32 * 0.01);
+            s.vz_ms = Some(gp.vz as f32 * 0.01);
         }
         MavMessage::ATTITUDE(att) => {
             debug!(logger, "ATTITUDE";
                 "roll_rad" => att.roll, "pitch_rad" => att.pitch, "yaw_rad" => att.yaw);
             let mut s = state.lock().unwrap();
-            s.roll_rad  = Some(att.roll);
+            s.roll_rad = Some(att.roll);
             s.pitch_rad = Some(att.pitch);
-            s.yaw_rad   = Some(att.yaw);
+            s.yaw_rad = Some(att.yaw);
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn set_availability_round_trip() {
+        let mut cap = CapabilityStatusType_::default();
+        set_availability(&mut cap, true);
+        #[cfg(uci_ge_2_5)]
+        assert_eq!(cap.availability, AvailabilityEnum::Available);
+        #[cfg(not(uci_ge_2_5))]
+        assert_eq!(
+            cap.availability_info.availability,
+            CapabilityAvailabilityEnum::Available
+        );
+
+        set_availability(&mut cap, false);
+        #[cfg(uci_ge_2_5)]
+        assert_eq!(cap.availability, AvailabilityEnum::Unavailable);
+        #[cfg(not(uci_ge_2_5))]
+        assert_eq!(
+            cap.availability_info.availability,
+            CapabilityAvailabilityEnum::Unavailable
+        );
     }
 }

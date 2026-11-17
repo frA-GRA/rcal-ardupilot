@@ -5,7 +5,7 @@ use slog::error;
 use rcal::cal::get_cal;
 use rcal::service::AbstractService;
 
-use rcal_sim::MavlinkSimService;
+use rcal_ardupilot::MavlinkSimService;
 
 #[rcal_macros::rcal_main]
 async fn main() {
@@ -24,11 +24,12 @@ async fn main() {
         std::process::exit(1);
     });
 
-    let mut svc = MavlinkSimService::new(service_name, cal, rcal_config.clone(), root_logger.clone())
-        .unwrap_or_else(|err| {
-            error!(root_logger, "MavlinkSimService init failed"; "error" => %err);
-            std::process::exit(2);
-        });
+    let mut svc =
+        MavlinkSimService::new(service_name, cal, rcal_config.clone(), root_logger.clone())
+            .unwrap_or_else(|err| {
+                error!(root_logger, "MavlinkSimService init failed"; "error" => %err);
+                std::process::exit(2);
+            });
 
     if let Err(e) = svc.activate() {
         error!(root_logger, "MavlinkSimService activate failed"; "error" => %e);

@@ -5,7 +5,9 @@ pub fn mav_state_to_system_state(s: MavState) -> SystemStateEnum {
     match s {
         MavState::MAV_STATE_ACTIVE | MavState::MAV_STATE_STANDBY => SystemStateEnum::Operational,
         MavState::MAV_STATE_CRITICAL | MavState::MAV_STATE_EMERGENCY => SystemStateEnum::Degraded,
-        MavState::MAV_STATE_POWEROFF | MavState::MAV_STATE_FLIGHT_TERMINATION => SystemStateEnum::Inactive,
+        MavState::MAV_STATE_POWEROFF | MavState::MAV_STATE_FLIGHT_TERMINATION => {
+            SystemStateEnum::Inactive
+        }
         _ => SystemStateEnum::Operational,
     }
 }
