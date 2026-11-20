@@ -16,3 +16,4 @@ tokio       = { version = "1", features = ["full"] }
 serde       = { version = "1", features = ["derive"] }
 chrono      = "0.4"
 slog        = "2"
+tokio-util = "0.7.20"

@@ -772,7 +772,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rcal-sim"
+name = "rcal-ardupilot"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -782,6 +782,7 @@ dependencies = [
  "serde",
  "slog",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1134,6 +1135,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2 0.6.5",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -1243,6 +1245,9 @@ name = "tracing-core"
 version = "0.1.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
+dependencies = [
+ "once_cell",
+]
 
 [[package]]
 name = "typenum"
