@@ -21,6 +21,8 @@ use mavlink::dialects::ardupilotmega::MavMessage;
 use mavlink::error::MessageReadError;
 use mavlink::MavConnection;
 
+use tokio_util::sync::CancellationToken;
+
 // Snapshot of MAVLink state shared between the receiver and publishers.
 #[derive(Clone)]
 struct SimState {
@@ -82,6 +84,8 @@ pub struct MavlinkSimService {
     sim_config: MavlinkSimConfig,
     logger: slog::Logger,
     task_handles: Vec<tokio::task::JoinHandle<()>>,
+
+    cancel_token: CancellationToken,
 }
 
 #[rcal_macros::rcal_trace]
@@ -153,6 +157,10 @@ impl MavlinkSimService {
         sys_tmpl.message_data_mut().service_id_mut().resize(1);
         *sys_tmpl.message_data_mut().service_id_mut()[0].uuid_mut() = service_uuid;
         sys_tmpl.message_data_mut().service_id_mut()[0].descriptive_label_set(service_name.into());
+        *sys_tmpl
+            .message_data_mut()
+            .communications_mut()
+            .mission_communications_state_mut() = MissionCommunicationsStateEnum::Active; // TODO: should actually verify it's connected
 
         // ── NavigationReport template ────────────────────────────────────────
         let mut nav_tmpl = svc.create_message::<NavigationReport_>()?;
@@ -234,7 +242,18 @@ impl MavlinkSimService {
             sim_config,
             logger,
             task_handles: Vec::new(),
+            cancel_token: CancellationToken::new(),
         })
+    }
+
+    pub async fn stop(&mut self) {
+        info!(self.logger, "Stopping service...");
+        self.cancel_token.cancel();
+        std::thread::sleep(Duration::from_secs(4));
+        for handle in &mut self.task_handles {
+            (&mut *handle).abort();
+        }
+        std::thread::sleep(Duration::from_secs(1));
     }
 }
 
@@ -262,8 +281,12 @@ impl AbstractService for MavlinkSimService {
         let sitl_addr = self.sim_config.sitl_address.clone();
         let recv_state = Arc::clone(&state);
         let recv_logger = self.logger.clone();
+        let recv_token = self.cancel_token.clone();
         let recv_handle = tokio::task::spawn_blocking(move || {
             let conn = std::sync::Arc::new(loop {
+                if recv_token.is_cancelled() {
+                    return;
+                }
                 match mavlink::connect::<MavMessage>(&sitl_addr) {
                     Ok(c) => break c,
                     Err(e) => {
@@ -277,6 +300,7 @@ impl AbstractService for MavlinkSimService {
             // SITL won't stream telemetry until it sees a GCS heartbeat.
             let hb_conn = std::sync::Arc::clone(&conn);
             let hb_logger = recv_logger.clone();
+            let recv_token2 = recv_token.clone();
             std::thread::spawn(move || {
                 use mavlink::dialects::ardupilotmega as apm;
                 let header = mavlink::MavHeader {
@@ -292,7 +316,7 @@ impl AbstractService for MavlinkSimService {
                     system_status: apm::MavState::MAV_STATE_ACTIVE,
                     mavlink_version: 3,
                 });
-                loop {
+                while !recv_token2.is_cancelled() {
                     if let Err(e) = hb_conn.send(&header, &hb) {
                         warn!(hb_logger, "heartbeat send failed"; "error" => %e);
                     }
@@ -300,7 +324,7 @@ impl AbstractService for MavlinkSimService {
                 }
             });
 
-            loop {
+            while !recv_token.is_cancelled() {
                 match conn.recv() {
                     Ok((_, msg)) => update_sim_state(&recv_state, msg, &recv_logger),
                     Err(MessageReadError::Io(ref io_err))
@@ -321,8 +345,9 @@ impl AbstractService for MavlinkSimService {
         let mut svc_writer = self.svc_writer.take().expect("svc_writer already taken");
         let mut svc_msg = self.svc_msg.clone();
         let svc_logger = self.logger.clone();
+        let recv_token = self.cancel_token.clone();
         self.task_handles.push(tokio::spawn(async move {
-            loop {
+            while !recv_token.is_cancelled() {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 update_message_header!(svc_msg);
                 if let Err(e) = svc_writer.write(&svc_msg) {

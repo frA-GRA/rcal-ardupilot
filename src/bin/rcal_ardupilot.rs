@@ -21,6 +21,7 @@ async fn main() {
     .await
     .unwrap_or_else(|err| {
         error!(root_logger, "CAL init failed"; "error" => %err);
+        println!("CAL init failed. Error: {}", err);
         std::process::exit(1);
     });
 
@@ -37,8 +38,10 @@ async fn main() {
     }
 
     tokio::signal::ctrl_c().await.ok();
+    svc.stop().await;
 
     if let Err(e) = svc.deactivate() {
         error!(root_logger, "MavlinkSimService deactivate failed"; "error" => %e);
     }
+    std::process::exit(0);
 }
